@@ -1,5 +1,6 @@
 package io.github.mobdev.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,20 +13,24 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -36,18 +41,22 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import io.github.mobdev.R
 import io.github.mobdev.data.AuthStore
 import io.github.mobdev.data.BASE_URL
 import io.github.mobdev.data.Message
+import io.github.mobdev.data.MessageData
 import io.github.mobdev.data.Repository
+import io.github.mobdev.data.TextData
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MessagesScreen(
     channel: String,
@@ -109,49 +118,96 @@ fun MessagesScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(channel) },
-                navigationIcon = {
-                    if (onBack != null) {
-                        TextButton(onClick = onBack) {
-                            Text(stringResource(R.string.back))
-                        }
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.systemBars)
+        ) {
+            // Шапка чата
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (onBack != null) {
+                    TextButton(onClick = onBack) {
+                        Text(
+                            "←",
+                            color = MaterialTheme.colorScheme.primary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 5.dp)
+                        )
                     }
+                    Spacer(Modifier.size(4.dp))
                 }
-            )
-        }
-    ) { pvs ->
-        Column(Modifier.padding(pvs).fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        channel.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.size(12.dp))
+                Text(
+                    text = channel.removeSuffix("@channel"),
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
+
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (messages.isEmpty() && loading) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
                 } else if (messages.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text(stringResource(R.string.no_messages))
+                        Text(
+                            stringResource(R.string.no_messages),
+                            color = MaterialTheme.colorScheme.outline
+                        )
                     }
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                            horizontal = 12.dp, vertical = 8.dp
+                        )
                     ) {
                         items(messages, key = { it.id ?: (it.from + it.time) }) { msg ->
-                            MessageRow(msg, onImageClick)
-                            HorizontalDivider()
+                            MessageBubble(msg, store.username, onImageClick)
                         }
                         if (canLoadMore) {
                             item {
-                                Button(
-                                    onClick = { scope.launch { loadMore() } },
+                                Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(8.dp),
-                                    enabled = !loading
+                                        .padding(vertical = 12.dp),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    Text(stringResource(R.string.load_more))
+                                    TextButton(
+                                        onClick = { scope.launch { loadMore() } },
+                                        enabled = !loading
+                                    ) {
+                                        Text(
+                                            stringResource(R.string.load_more),
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -159,57 +215,78 @@ fun MessagesScreen(
                 }
             }
 
+            // Поле ввода
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(8.dp),
+                    .background(MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedTextField(
                     value = input,
                     onValueChange = { input = it },
-                    placeholder = { Text(stringResource(R.string.message_hint)) },
+                    placeholder = {
+                        Text(
+                            stringResource(R.string.message_hint),
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    },
                     modifier = Modifier.weight(1f),
-                    singleLine = true
+                    singleLine = true,
+                    shape = RoundedCornerShape(22.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                    )
                 )
                 Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = {
-                        val text = input.trim()
-                        if (text.isEmpty()) return@Button
-                        val token = store.token ?: return@Button
-                        val name = store.username ?: return@Button
-                        scope.launch {
-                            try {
-                                Repository.sendText(token, name, channel, text)
-                                input = ""
-                                // грузим все остальные сообщения
-                                var keepLoading = true
-                                while (keepLoading) {
-                                    val newestId = messages.maxOfOrNull { it.id ?: 0L } ?: 0L
-                                    val newer = Repository.messages(channel, lastKnownId = newestId, reverse = false)
-                                    if (newer.isEmpty()) {
-                                        keepLoading = false
-                                    } else {
-                                        messages = (messages + newer).distinctBy { it.id }
-                                        if (newer.size < 20) keepLoading = false
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary)
+                        .clickable {
+                            val text = input.trim()
+                            if (text.isEmpty()) return@clickable
+                            val token = store.token ?: return@clickable
+                            val name = store.username ?: return@clickable
+                            scope.launch {
+                                try {
+                                    Repository.sendText(token, name, channel, text)
+                                    input = ""
+                                    var keepLoading = true
+                                    while (keepLoading) {
+                                        val newestId = messages.maxOfOrNull { it.id ?: 0L } ?: 0L
+                                        val newer = Repository.messages(channel, lastKnownId = newestId, reverse = false)
+                                        if (newer.isEmpty()) {
+                                            keepLoading = false
+                                        } else {
+                                            messages = (messages + newer).distinctBy { it.id }
+                                            if (newer.size < 20) keepLoading = false
+                                        }
+                                    }
+                                    canLoadMore = false
+                                    if (messages.isNotEmpty()) {
+                                        listState.animateScrollToItem(messages.size - 1)
+                                    }
+                                } catch (e: Exception) {
+                                    if (Repository.isUnauthorized(e)) {
+                                        store.token = null
+                                        onUnauthorized()
                                     }
                                 }
-                                canLoadMore = false
-                                // летим вниз к последним сообщениями
-                                if (messages.isNotEmpty()) {
-                                    listState.animateScrollToItem(messages.size - 1)
-                                }
-                            } catch (e: Exception) {
-                                if (Repository.isUnauthorized(e)) {
-                                    store.token = null
-                                    onUnauthorized()
-                                }
                             }
-                        }
-                    }
+                        },
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(stringResource(R.string.send))
+                    Text(
+                        "➤",
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 2.dp)
+                    )
                 }
             }
         }
@@ -217,31 +294,58 @@ fun MessagesScreen(
 }
 
 @Composable
-private fun MessageRow(msg: Message, onImageClick: (String) -> Unit) {
-    Column(
+private fun MessageBubble(msg: Message, currentUser: String?, onImageClick: (String) -> Unit) {
+    val isMine = msg.from == currentUser
+    val bubbleColor = if (isMine) MaterialTheme.colorScheme.primary
+    else MaterialTheme.colorScheme.surface
+    val textColor = if (isMine) MaterialTheme.colorScheme.onPrimary
+    else MaterialTheme.colorScheme.onSurface
+    val shape = if (isMine) RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp)
+    else RoundedCornerShape(18.dp, 18.dp, 18.dp, 4.dp)
+
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(vertical = 4.dp),
+        horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start
     ) {
-        Text(
-            text = msg.from,
-            style = MaterialTheme.typography.labelMedium
-        )
-        Spacer(Modifier.height(4.dp))
-        when {
-            msg.data.text != null -> {
-                Text(msg.data.text.text)
-            }
-            msg.data.image?.link != null -> {
-                val link = msg.data.image.link
-                AsyncImage(
-                    model = "${BASE_URL}thumb/$link",
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(160.dp)
-                        .clickable { onImageClick(link) }
+        Column(
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .clip(shape)
+                .background(bubbleColor)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            if (!isMine) {
+                Text(
+                    text = msg.from,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold
                 )
+                Spacer(Modifier.height(2.dp))
+            }
+            when {
+                msg.data.text != null -> {
+                    Text(
+                        msg.data.text.text,
+                        color = textColor,
+                        fontSize = 15.sp
+                    )
+                }
+                msg.data.image?.link != null -> {
+                    val link = msg.data.image.link
+                    AsyncImage(
+                        model = "${BASE_URL}thumb/$link",
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(180.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable { onImageClick(link) }
+                    )
+                }
             }
         }
     }
 }
+
