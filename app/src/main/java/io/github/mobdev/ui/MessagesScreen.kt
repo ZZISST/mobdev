@@ -22,8 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.systemBars
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -52,9 +50,7 @@ import io.github.mobdev.R
 import io.github.mobdev.data.AuthStore
 import io.github.mobdev.data.BASE_URL
 import io.github.mobdev.data.Message
-import io.github.mobdev.data.MessageData
 import io.github.mobdev.data.Repository
-import io.github.mobdev.data.TextData
 import kotlinx.coroutines.launch
 
 @Composable
