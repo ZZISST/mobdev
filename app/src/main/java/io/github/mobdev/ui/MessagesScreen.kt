@@ -181,18 +181,25 @@ fun MessagesScreen(
                         val name = store.username ?: return@Button
                         scope.launch {
                             try {
-                                val newId = Repository.sendText(token, name, channel, text).toLongOrNull()
-                                val newMsg = Message(
-                                    id = newId,
-                                    from = name,
-                                    to = channel,
-                                    data = io.github.mobdev.data.MessageData(
-                                        text = io.github.mobdev.data.TextData(text)
-                                    ),
-                                    time = System.currentTimeMillis()
-                                )
-                                messages = messages + newMsg
+                                Repository.sendText(token, name, channel, text)
                                 input = ""
+                                // грузим все остальные сообщения
+                                var keepLoading = true
+                                while (keepLoading) {
+                                    val newestId = messages.maxOfOrNull { it.id ?: 0L } ?: 0L
+                                    val newer = Repository.messages(channel, lastKnownId = newestId, reverse = false)
+                                    if (newer.isEmpty()) {
+                                        keepLoading = false
+                                    } else {
+                                        messages = (messages + newer).distinctBy { it.id }
+                                        if (newer.size < 20) keepLoading = false
+                                    }
+                                }
+                                canLoadMore = false
+                                // летим вниз к последним сообщениями
+                                if (messages.isNotEmpty()) {
+                                    listState.animateScrollToItem(messages.size - 1)
+                                }
                             } catch (e: Exception) {
                                 if (Repository.isUnauthorized(e)) {
                                     store.token = null
