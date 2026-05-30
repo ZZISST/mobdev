@@ -18,4 +18,6 @@
     <string name="no_messages">Сообщений пока нет</string>
     <string name="image_full">Изображение</string>
     <string name="title_activity_main">MainActivity</string>
+    <string name="offline_banner">нет подключения к сети</string>
+    <string name="message_pending">ожидает отправки…</string>
 </resources>

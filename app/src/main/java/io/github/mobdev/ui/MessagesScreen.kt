@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.systemBars
@@ -49,26 +50,61 @@ import coil.compose.AsyncImage
 import io.github.mobdev.R
 import io.github.mobdev.data.AuthStore
 import io.github.mobdev.data.BASE_URL
+import io.github.mobdev.data.LocalCache
 import io.github.mobdev.data.Message
+import io.github.mobdev.data.PendingMessage
 import io.github.mobdev.data.Repository
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 @Composable
 fun MessagesScreen(
     channel: String,
     onBack: (() -> Unit)?,
     onImageClick: (String) -> Unit,
-    onUnauthorized: () -> Unit
+    onUnauthorized: () -> Unit,
+    isOnline: Boolean
 ) {
     val ctx = LocalContext.current
     val store = remember { AuthStore(ctx) }
+    val cache = remember { LocalCache(ctx) }
     val scope = rememberCoroutineScope()
 
     var messages by rememberSaveable(channel) { mutableStateOf<List<Message>>(emptyList()) }
     var loading by rememberSaveable(channel) { mutableStateOf(false) }
     var input by rememberSaveable(channel) { mutableStateOf("") }
     var canLoadMore by rememberSaveable(channel) { mutableStateOf(true) }
+    var pending by remember(channel) {
+        mutableStateOf(cache.loadPending().filter { it.channel == channel })
+    }
     val listState = rememberLazyListState()
+
+    suspend fun sendPending() {
+        val token = store.token ?: return
+        val all = cache.loadPending()
+        val forChannel = all.filter { it.channel == channel }
+        if (forChannel.isEmpty()) return
+
+        val sentIds = mutableListOf<String>()
+        for (p in forChannel) {
+            try {
+                Repository.sendText(token, p.from, p.channel, p.text)
+                sentIds.add(p.localId)
+            } catch (e: Exception) {
+                if (Repository.isUnauthorized(e)) {
+                    store.token = null
+                    onUnauthorized()
+                    return
+                }
+                break
+            }
+        }
+        if (sentIds.isNotEmpty()) {
+            val remaining = all.filter { it.localId !in sentIds }
+            cache.savePending(remaining)
+            pending = remaining.filter { it.channel == channel }
+        }
+    }
 
     suspend fun loadInitial() {
         loading = true
@@ -76,6 +112,7 @@ fun MessagesScreen(
             val loaded = Repository.messages(channel, lastKnownId = 0, reverse = false)
             messages = loaded
             canLoadMore = loaded.size >= 20
+            cache.saveMessages(channel, messages)
         } catch (e: Exception) {
             if (Repository.isUnauthorized(e)) {
                 store.token = null
@@ -97,6 +134,7 @@ fun MessagesScreen(
             } else {
                 messages = (messages + newer).distinctBy { it.id }
                 if (newer.size < 20) canLoadMore = false
+                cache.saveMessages(channel, messages)
             }
         } catch (e: Exception) {
             if (Repository.isUnauthorized(e)) {
@@ -109,7 +147,13 @@ fun MessagesScreen(
     }
 
     LaunchedEffect(channel) {
-        if (messages.isEmpty()) {
+        val cached = cache.loadMessages(channel)
+        if (cached.isNotEmpty()) messages = cached
+    }
+
+    LaunchedEffect(channel, isOnline) {
+        if (isOnline) {
+            sendPending()
             loadInitial()
         }
     }
@@ -123,7 +167,6 @@ fun MessagesScreen(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.systemBars)
         ) {
-            // Шапка чата
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -164,12 +207,28 @@ fun MessagesScreen(
                 )
             }
 
+            if (!isOnline) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        stringResource(R.string.offline_banner),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (messages.isEmpty() && loading) {
+                if (messages.isEmpty() && pending.isEmpty() && loading) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
-                } else if (messages.isEmpty()) {
+                } else if (messages.isEmpty() && pending.isEmpty()) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             stringResource(R.string.no_messages),
@@ -180,14 +239,12 @@ fun MessagesScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                            horizontal = 12.dp, vertical = 8.dp
-                        )
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                     ) {
                         items(messages, key = { it.id ?: (it.from + it.time) }) { msg ->
                             MessageBubble(msg, store.username, onImageClick)
                         }
-                        if (canLoadMore) {
+                        if (canLoadMore && isOnline) {
                             item {
                                 Box(
                                     modifier = Modifier
@@ -207,11 +264,13 @@ fun MessagesScreen(
                                 }
                             }
                         }
+                        items(pending, key = { "pending_${it.localId}" }) { p ->
+                            PendingBubble(p)
+                        }
                     }
                 }
             }
 
-            // Поле ввода
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -245,8 +304,33 @@ fun MessagesScreen(
                         .clickable {
                             val text = input.trim()
                             if (text.isEmpty()) return@clickable
-                            val token = store.token ?: return@clickable
                             val name = store.username ?: return@clickable
+
+                            if (!isOnline) {
+                                val p = PendingMessage(
+                                    localId = UUID.randomUUID().toString(),
+                                    channel = channel,
+                                    from = name,
+                                    text = text,
+                                    timestamp = System.currentTimeMillis()
+                                )
+                                val all = cache.loadPending()
+                                cache.savePending(all + p)
+                                val newPending = pending + p
+                                pending = newPending
+                                input = ""
+                                scope.launch {
+                                    val total = messages.size +
+                                            (if (canLoadMore && isOnline) 1 else 0) +
+                                            newPending.size
+                                    if (total > 0) {
+                                        listState.animateScrollToItem(total - 1)
+                                    }
+                                }
+                                return@clickable
+                            }
+
+                            val token = store.token ?: return@clickable
                             scope.launch {
                                 try {
                                     Repository.sendText(token, name, channel, text)
@@ -254,7 +338,11 @@ fun MessagesScreen(
                                     var keepLoading = true
                                     while (keepLoading) {
                                         val newestId = messages.maxOfOrNull { it.id ?: 0L } ?: 0L
-                                        val newer = Repository.messages(channel, lastKnownId = newestId, reverse = false)
+                                        val newer = Repository.messages(
+                                            channel,
+                                            lastKnownId = newestId,
+                                            reverse = false
+                                        )
                                         if (newer.isEmpty()) {
                                             keepLoading = false
                                         } else {
@@ -263,6 +351,7 @@ fun MessagesScreen(
                                         }
                                     }
                                     canLoadMore = false
+                                    cache.saveMessages(channel, messages)
                                     if (messages.isNotEmpty()) {
                                         listState.animateScrollToItem(messages.size - 1)
                                     }
@@ -285,6 +374,36 @@ fun MessagesScreen(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PendingBubble(msg: PendingMessage) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.End
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(max = 280.dp)
+                .clip(RoundedCornerShape(18.dp, 18.dp, 4.dp, 18.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
+                .padding(horizontal = 12.dp, vertical = 8.dp)
+        ) {
+            Text(
+                msg.text,
+                color = MaterialTheme.colorScheme.onPrimary,
+                fontSize = 15.sp
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                stringResource(R.string.message_pending),
+                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f),
+                fontSize = 10.sp
+            )
         }
     }
 }
@@ -344,4 +463,3 @@ private fun MessageBubble(msg: Message, currentUser: String?, onImageClick: (Str
         }
     }
 }
-

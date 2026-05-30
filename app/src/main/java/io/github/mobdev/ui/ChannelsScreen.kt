@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.mobdev.R
 import io.github.mobdev.data.AuthStore
+import io.github.mobdev.data.LocalCache
 import io.github.mobdev.data.Repository
 import kotlinx.coroutines.launch
 
@@ -49,24 +50,33 @@ fun ChannelsScreen(
     selectedChannel: String? = null,
     onChannelClick: (String) -> Unit,
     onLogout: () -> Unit,
-    onUnauthorized: () -> Unit
+    onUnauthorized: () -> Unit,
+    isOnline: Boolean
 ) {
     val ctx = LocalContext.current
     val store = remember { AuthStore(ctx) }
+    val cache = remember { LocalCache(ctx) }
     val scope = rememberCoroutineScope()
 
     var channels by rememberSaveable { mutableStateOf<List<String>?>(null) }
 
     LaunchedEffect(Unit) {
         if (channels == null) {
+            val cached = cache.loadChannels()
+            if (cached != null) channels = cached
+        }
+    }
+
+    LaunchedEffect(isOnline) {
+        if (isOnline) {
             try {
-                channels = Repository.channels()
+                val result = Repository.channels(forceRefresh = true)
+                channels = result
+                cache.saveChannels(result)
             } catch (e: Exception) {
                 if (Repository.isUnauthorized(e)) {
                     store.token = null
                     onUnauthorized()
-                } else {
-                    channels = emptyList()
                 }
             }
         }
@@ -81,7 +91,6 @@ fun ChannelsScreen(
                 .fillMaxSize()
                 .windowInsetsPadding(WindowInsets.systemBars)
         ) {
-            // Шапка
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -117,6 +126,22 @@ fun ChannelsScreen(
                         stringResource(R.string.logout),
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            if (!isOnline) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.errorContainer)
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        stringResource(R.string.offline_banner),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        fontSize = 12.sp
                     )
                 }
             }

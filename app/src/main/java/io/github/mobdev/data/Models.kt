@@ -34,3 +34,12 @@ data class TextData(val text: String)
 
 @Serializable
 data class ImageData(val link: String? = null)
+
+@Serializable
+data class PendingMessage(
+    val localId: String,
+    val channel: String,
+    val from: String,
+    val text: String,
+    val timestamp: Long
+)

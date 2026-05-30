@@ -30,7 +30,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.collectAsState
 import io.github.mobdev.data.AuthStore
+import io.github.mobdev.data.NetworkMonitor
 import io.github.mobdev.ui.ChannelsScreen
 import io.github.mobdev.ui.ImageScreen
 import io.github.mobdev.ui.LoginScreen
@@ -64,6 +66,8 @@ private fun dec(s: String): String = URLDecoder.decode(s, StandardCharsets.UTF_8
 fun AppRoot(isWide: Boolean) {
     val ctx = LocalContext.current
     val store = remember { AuthStore(ctx) }
+    val networkMonitor = remember { NetworkMonitor(ctx) }
+    val isOnline by networkMonitor.isOnline.collectAsState(initial = true)
 
     var loggedIn by rememberSaveable {
         mutableStateOf(!store.token.isNullOrBlank() && !store.username.isNullOrBlank())
@@ -104,7 +108,8 @@ fun AppRoot(isWide: Boolean) {
                         openImage = null
                     },
                     onLogout = onLogout,
-                    onUnauthorized = onLogout
+                    onUnauthorized = onLogout,
+                    isOnline = isOnline
                 )
             }
             Box(modifier = Modifier.weight(1f).fillMaxSize()) {
@@ -117,7 +122,8 @@ fun AppRoot(isWide: Boolean) {
                         channel = openChannel!!,
                         onBack = null,
                         onImageClick = { openImage = it },
-                        onUnauthorized = onLogout
+                        onUnauthorized = onLogout,
+                        isOnline = isOnline
                     )
                     else -> Surface(
                         modifier = Modifier.fillMaxSize(),
@@ -156,12 +162,14 @@ fun AppRoot(isWide: Boolean) {
                 channel = openChannel!!,
                 onBack = { openChannel = null },
                 onImageClick = { openImage = it },
-                onUnauthorized = onLogout
+                onUnauthorized = onLogout,
+                isOnline = isOnline
             )
             else -> ChannelsScreen(
                 onChannelClick = { openChannel = it },
                 onLogout = onLogout,
-                onUnauthorized = onLogout
+                onUnauthorized = onLogout,
+                isOnline = isOnline
             )
         }
     }
