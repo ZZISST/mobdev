@@ -1,3 +1,12 @@
 <resources>
     <string name="app_name">mobdev</string>
+    <string name="theme_system">Система</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="calc_error">Ошибка</string>
+    <string name="settings_title">Тема</string>
+    <string name="close">Закрыть</string>
+    <string name="history_title">История</string>
+    <string name="history_clear">Очистить</string>
+    <string name="history_empty">История пуста</string>
 </resources>
